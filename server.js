@@ -3,6 +3,8 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });;
 const express = require('express');
 const TuyAPI = require('tuyapi');
 const app = express();
+const dgram = require('dgram');
+const os = require('os');
 app.use(express.json());
 
 const device = new TuyAPI({
@@ -54,6 +56,46 @@ app.post('/switch', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+
+// Function to get the server's local IP address
+function getLocalIPAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const iface of Object.values(interfaces)) {
+    for (const config of iface) {
+      if (config.family === 'IPv4' && !config.internal) {
+        return config.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+// Create and configure the UDP server
+const udpServer = dgram.createSocket('udp4');
+const UDP_PORT = 6000;
+const BROADCAST_ADDR = '255.255.255.255';
+
+// Enable broadcasting
+udpServer.bind(UDP_PORT, () => {
+  udpServer.setBroadcast(true);
+  console.log(`UDP server listening on ${BROADCAST_ADDR}:${UDP_PORT}`);
+});
+
+// Handle incoming UDP messages
+udpServer.on('message', (msg, rinfo) => {
+  if(msg.indexOf("proxyTuya") === -1) return;
+  console.log(`Received UDP message from ${rinfo.address}:${rinfo.port}`);
+  const localIP = getLocalIPAddress();
+  const response = Buffer.from(localIP);
+  udpServer.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
+    if (err) {
+      console.error('Error sending UDP response:', err);
+    } else {
+      console.log(`Sent IP address ${localIP} to ${rinfo.address}:${rinfo.port}`);
+    }
+  });
 });
 
 // Handle graceful shutdown
