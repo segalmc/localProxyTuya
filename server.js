@@ -1,4 +1,4 @@
-require('dotenv').config(); // Add this line at the top
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });; // Add this line at the top
 
 const express = require('express');
 const TuyAPI = require('tuyapi');
