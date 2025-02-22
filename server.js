@@ -6,7 +6,9 @@ const app = express();
 app.use(express.json());
 
 const device = new TuyAPI({
-  key: process.env.LOCALKEY  // Load the localkey from .env
+  key: process.env.LOCALKEY,  // Load the localkey from .env
+  id: process.env.DEVICEID,
+  version: '3.4'
 });
 
 let isConnected = false;
