@@ -14,19 +14,76 @@ const device = new TuyAPI({
 });
 
 let isConnected = false;
-let deviceState = null; // This will store the current state of the device (true for on, false for off)
+let deviceState = null;
 
+// Add device event listeners
+device.on('connected', () => {
+  console.log('Connected to device via event!');
+  isConnected = true;
+});
+
+device.on('disconnected', () => {
+  console.log('Disconnected from device via event!');
+  isConnected = false;
+  
+  // Try to reconnect after a short delay
+  setTimeout(async () => {
+    try {
+      await connectDevice();
+    } catch (error) {
+      console.error('Failed to reconnect:', error);
+    }
+  }, 5000);
+});
+
+device.on('error', error => {
+  console.error('Device error via event:', error);
+});
+
+// Listen for data updates
+device.on('data', data => {
+  console.log('Received data update:', data);
+  if (data && data.dps && data.dps['1'] !== undefined) {
+    deviceState = data.dps['1'];
+    console.log('Device state updated to:', deviceState);
+  }
+});
+
+// Simplify connectDevice function
 async function connectDevice() {
   if (!isConnected) {
     try {
-      await device.find();
-      await device.connect();
-      isConnected = true;
-      console.log('Connected to device!');
-      // Get the initial state of the device when connected
-      deviceState = await device.get({ dps: 1 });
+      await Promise.race([
+        device.find(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Find device timeout')), 5000)
+        )
+      ]);
+      
+      await Promise.race([
+        device.connect(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Connect timeout')), 5000)
+        )
+      ]);
+      
+      // Get initial state
+      const status = await Promise.race([
+        device.get({ dps: 1 }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Initial status check timeout')), 5000)
+        )
+      ]);
+      
+      if (status === undefined || status === null) {
+        throw new Error('Invalid initial device status');
+      }
+      
+      deviceState = status;
     } catch (error) {
       console.error('Error connecting to device:', error);
+      isConnected = false;
+      throw error;
     }
   }
 }
@@ -98,7 +155,7 @@ udpServer.on('message', (msg, rinfo) => {
   });
 });
 
-// Handle graceful shutdown
+// Simplify shutdown handler
 process.on('SIGINT', () => {
   device.disconnect();
   console.log('Disconnected from device');
@@ -108,4 +165,5 @@ process.on('SIGINT', () => {
 // Start the server
 app.listen(3000, () => {
   console.log('Server running on port 3000');
+  connectDevice(); // Initial connection and start status checks
 });
