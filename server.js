@@ -15,6 +15,8 @@ const device = new TuyAPI({
 
 let isConnected = false;
 let deviceState = null;
+let autoOffTimer = null;
+const AUTO_OFF_DELAY = 30 * 60 * 1000; // 30 minutes in milliseconds
 
 // Add device event listeners
 device.on('connected', () => {
@@ -40,12 +42,34 @@ device.on('error', error => {
   console.error('Device error via event:', error);
 });
 
+// Function to handle auto-off timer
+function handleAutoOffTimer() {
+  // Clear existing timer if any
+  if (autoOffTimer) {
+    clearTimeout(autoOffTimer);
+  }
+  
+  // Only set new timer if device is on
+  if (deviceState === true) {
+    autoOffTimer = setTimeout(async () => {
+      try {
+        console.log('Auto-off timer expired. Turning device off...');
+        await device.set({ dps: 1, set: false });
+        deviceState = false;
+      } catch (error) {
+        console.error('Error in auto-off timer:', error);
+      }
+    }, AUTO_OFF_DELAY);
+  }
+}
+
 // Listen for data updates
 device.on('data', data => {
   console.log('Received data update:', data);
   if (data && data.dps && data.dps['1'] !== undefined) {
     deviceState = data.dps['1'];
     console.log('Device state updated to:', deviceState);
+    handleAutoOffTimer(); // Handle timer when state changes
   }
 });
 
@@ -109,6 +133,7 @@ app.post('/switch', async (req, res) => {
     await connectDevice();
     await device.set({ dps: 1, set: state });
     deviceState = state; // Update the local state variable
+    handleAutoOffTimer(); // Handle timer when state changes
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -157,6 +182,9 @@ udpServer.on('message', (msg, rinfo) => {
 
 // Simplify shutdown handler
 process.on('SIGINT', () => {
+  if (autoOffTimer) {
+    clearTimeout(autoOffTimer);
+  }
   device.disconnect();
   console.log('Disconnected from device');
   process.exit();
