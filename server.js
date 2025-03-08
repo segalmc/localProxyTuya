@@ -45,12 +45,13 @@ device.on('error', error => {
 // Function to handle auto-off timer
 function handleAutoOffTimer() {
   // Clear existing timer if any
-  if (autoOffTimer) {
+  if (deviceState === false && autoOffTimer) {
     clearTimeout(autoOffTimer);
+    autoOffTimer = null;
   }
   
   // Only set new timer if device is on
-  if (deviceState === true) {
+  if (!autoOffTimer && deviceState === true) {
     autoOffTimer = setTimeout(async () => {
       try {
         console.log('Auto-off timer expired. Turning device off...');
